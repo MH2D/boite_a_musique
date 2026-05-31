@@ -3,7 +3,10 @@ name = "i-am-listening"
 version = "0.1.0"
 description = "Barcode-triggered music player"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pillow>=12.2.0",
+    "python-barcode>=0.16.1",
+]
 
 [build-system]
 requires = ["hatchling"]
