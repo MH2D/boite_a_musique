@@ -1,0 +1,18 @@
+# Audio & image assets (large files, not tracked)
+portraits/
+musique_portrait/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
+
+# uv
+.python-version
+
+# Runtime data
+mappings.json
