@@ -16,6 +16,7 @@ MAPPINGS_JSON = PROJECT_ROOT / "mappings.json"
 PORTRAITS_DIR = PROJECT_ROOT / "portraits"
 OUTPUT_DIR = PROJECT_ROOT / "barcodes"
 DASHBOARD_HTML = PROJECT_ROOT / "dashboard.html"
+PRINT_SHEET_PNG = PROJECT_ROOT / "barcodes_print_sheet.png"
 
 
 def load_data() -> list[dict]:
@@ -97,6 +98,42 @@ def file_to_data_uri(path: Path) -> str:
     mime = "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/png"
     b64 = base64.b64encode(path.read_bytes()).decode()
     return f"data:{mime};base64,{b64}"
+
+
+def generate_print_sheet(labels: list[Image.Image], cols: int = 4) -> Image.Image:
+    """Assemble all barcode labels into a single printable PNG (A4 @ 300 DPI)."""
+    if not labels:
+        return Image.new("RGB", (100, 100), "white")
+
+    # A4 at 300 DPI
+    page_w, page_h = 2480, 3508
+    margin = 60
+    spacing = 30
+
+    usable_w = page_w - 2 * margin
+    cell_w = (usable_w - (cols - 1) * spacing) // cols
+
+    # Scale each label to fit cell width, preserving aspect ratio
+    scaled: list[Image.Image] = []
+    for lbl in labels:
+        ratio = cell_w / lbl.width
+        new_h = int(lbl.height * ratio)
+        scaled.append(lbl.resize((cell_w, new_h), Image.LANCZOS))
+
+    cell_h = max(s.height for s in scaled)
+    rows = (len(scaled) + cols - 1) // cols
+    total_h = 2 * margin + rows * cell_h + (rows - 1) * spacing
+    canvas_h = max(page_h, total_h)
+
+    sheet = Image.new("RGB", (page_w, canvas_h), "white")
+
+    for idx, img in enumerate(scaled):
+        r, c = divmod(idx, cols)
+        x = margin + c * (cell_w + spacing)
+        y = margin + r * (cell_h + spacing)
+        sheet.paste(img, (x, y))
+
+    return sheet
 
 
 def generate_dashboard_html(
@@ -272,6 +309,7 @@ def main():
 
     mappings: dict[str, dict] = {}
     entries: list[dict] = []
+    all_labels: list[Image.Image] = []
 
     for i, item in enumerate(data, start=1):
         photo = item["photo"]
@@ -293,6 +331,7 @@ def main():
         portrait_uri = file_to_data_uri(portrait_path)
         label_uri = image_to_data_uri(label)
 
+        all_labels.append(label)
         entries.append(
             {
                 "name": name,
@@ -309,14 +348,18 @@ def main():
     with open(MAPPINGS_JSON, "w") as f:
         json.dump(mappings, f, indent=2, ensure_ascii=False)
 
+    # Generate print sheet PNG
+    sheet = generate_print_sheet(all_labels)
+    sheet.save(str(PRINT_SHEET_PNG), dpi=(300, 300))
+
     # Generate dashboard HTML
     html = generate_dashboard_html(entries, mappings)
     DASHBOARD_HTML.write_text(html)
 
     print(f"\n✓ {len(entries)} barcode labels saved to  {OUTPUT_DIR}/")
     print(f"✓ mappings.json updated")
+    print(f"✓ print sheet →  {PRINT_SHEET_PNG}")
     print(f"✓ dashboard →  {DASHBOARD_HTML}")
-    print(f"\nOpen dashboard.html in a browser, then use the Print Barcodes tab to print & cut.")
 
 
 if __name__ == "__main__":

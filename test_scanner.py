@@ -9,16 +9,16 @@ import urllib.request
 import json
 
 # Mac French AZERTY: the scanner sends US keycodes, but macOS interprets them
-# through the French layout, turning digits into these characters.
-AZERTY_TO_DIGIT = str.maketrans("àç!è§('é&\"", "0987654321")
+# through the French layout.  This table maps received chars back to QWERTY.
+AZERTY_TO_QWERTY = str.maketrans(
+    "&é\"'(§è!çà" "aqzwAQZW",
+    "1234567890" "qawzQAWZ",
+)
 
 
 def fix_azerty(raw: str) -> str:
-    """Translate AZERTY-mangled characters back to digits."""
-    translated = raw.translate(AZERTY_TO_DIGIT)
-    if translated != raw and translated.isdigit():
-        return translated
-    return raw
+    """Translate AZERTY-mangled characters back to QWERTY."""
+    return raw.translate(AZERTY_TO_QWERTY)
 
 
 def lookup_product(barcode: str) -> str | None:
