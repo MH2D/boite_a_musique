@@ -16,7 +16,7 @@ MAPPINGS_JSON = PROJECT_ROOT / "mappings.json"
 PORTRAITS_DIR = PROJECT_ROOT / "portraits"
 OUTPUT_DIR = PROJECT_ROOT / "barcodes"
 DASHBOARD_HTML = PROJECT_ROOT / "dashboard.html"
-PRINT_SHEET_PNG = PROJECT_ROOT / "barcodes_print_sheet.png"
+PRINT_SHEET_PDF = PROJECT_ROOT / "barcodes_print_sheet.pdf"
 
 
 def load_data() -> list[dict]:
@@ -34,11 +34,21 @@ def generate_barcode_value(index: int) -> str:
 
 
 def create_barcode_image(value: str) -> Image.Image:
-    """Render a Code128 barcode to a PIL Image."""
+    """Render a Code128 barcode to a PIL Image (sized for reliable scanning)."""
     writer = ImageWriter()
     code = barcode.get("code128", value, writer=writer)
     buf = BytesIO()
-    code.write(buf, options={"write_text": True, "module_height": 15, "font_size": 10, "text_distance": 5, "quiet_zone": 6.5})
+    code.write(
+        buf,
+        options={
+            "write_text": True,
+            "module_height": 25,
+            "module_width": 0.4,
+            "font_size": 14,
+            "text_distance": 7,
+            "quiet_zone": 10,
+        },
+    )
     buf.seek(0)
     return Image.open(buf).convert("RGB")
 
@@ -48,10 +58,10 @@ def create_label(barcode_value: str, portrait_path: Path, name: str) -> Image.Im
     barcode_img = create_barcode_image(barcode_value)
 
     portrait = Image.open(portrait_path).convert("RGB")
-    portrait.thumbnail((70, 70))
+    portrait.thumbnail((100, 100))
 
-    padding = 10
-    name_height = 18
+    padding = 14
+    name_height = 26
     width = max(barcode_img.width, portrait.width + padding * 2)
     height = barcode_img.height + portrait.height + name_height + padding
 
@@ -69,7 +79,7 @@ def create_label(barcode_value: str, portrait_path: Path, name: str) -> Image.Im
     # Name text below portrait
     draw = ImageDraw.Draw(label)
     try:
-        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 12)
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
     except OSError:
         font = ImageFont.load_default()
     bbox = draw.textbbox((0, 0), name, font=font)
@@ -100,17 +110,21 @@ def file_to_data_uri(path: Path) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def generate_print_sheet(labels: list[Image.Image], cols: int = 4) -> Image.Image:
-    """Assemble all barcode labels into a single printable PNG (A4 @ 300 DPI)."""
+def generate_print_pdf(labels: list[Image.Image], output_path: Path, cols: int = 2) -> int:
+    """Assemble barcode labels into a multi-page A4 PDF (300 DPI).
+
+    Returns the number of pages generated.
+    """
     if not labels:
-        return Image.new("RGB", (100, 100), "white")
+        return 0
 
     # A4 at 300 DPI
     page_w, page_h = 2480, 3508
-    margin = 60
-    spacing = 30
+    margin = 80
+    spacing = 40
 
     usable_w = page_w - 2 * margin
+    usable_h = page_h - 2 * margin
     cell_w = (usable_w - (cols - 1) * spacing) // cols
 
     # Scale each label to fit cell width, preserving aspect ratio
@@ -121,24 +135,35 @@ def generate_print_sheet(labels: list[Image.Image], cols: int = 4) -> Image.Imag
         scaled.append(lbl.resize((cell_w, new_h), Image.LANCZOS))
 
     cell_h = max(s.height for s in scaled)
-    rows = (len(scaled) + cols - 1) // cols
-    total_h = 2 * margin + rows * cell_h + (rows - 1) * spacing
-    canvas_h = max(page_h, total_h)
 
-    sheet = Image.new("RGB", (page_w, canvas_h), "white")
+    # How many rows fit on one page?
+    rows_per_page = max(1, (usable_h + spacing) // (cell_h + spacing))
+    labels_per_page = rows_per_page * cols
 
-    for idx, img in enumerate(scaled):
-        r, c = divmod(idx, cols)
-        x = margin + c * (cell_w + spacing)
-        y = margin + r * (cell_h + spacing)
-        sheet.paste(img, (x, y))
+    # Build pages
+    pages: list[Image.Image] = []
+    for page_start in range(0, len(scaled), labels_per_page):
+        page = Image.new("RGB", (page_w, page_h), "white")
+        batch = scaled[page_start : page_start + labels_per_page]
+        for idx, img in enumerate(batch):
+            r, c = divmod(idx, cols)
+            x = margin + c * (cell_w + spacing)
+            y = margin + r * (cell_h + spacing)
+            page.paste(img, (x, y))
+        pages.append(page)
 
-    return sheet
+    # Save as multi-page PDF
+    pages[0].save(
+        str(output_path),
+        format="PDF",
+        resolution=300,
+        save_all=True,
+        append_images=pages[1:],
+    )
+    return len(pages)
 
 
-def generate_dashboard_html(
-    entries: list[dict], mappings: dict[str, dict]
-) -> str:
+def generate_dashboard_html(entries: list[dict], mappings: dict[str, dict]) -> str:
     """Build a self-contained HTML dashboard with two views:
     1. Overview — cards showing portrait, name, song, barcode
     2. Print sheet — compact grid of barcode labels for cutting
@@ -348,9 +373,8 @@ def main():
     with open(MAPPINGS_JSON, "w") as f:
         json.dump(mappings, f, indent=2, ensure_ascii=False)
 
-    # Generate print sheet PNG
-    sheet = generate_print_sheet(all_labels)
-    sheet.save(str(PRINT_SHEET_PNG), dpi=(300, 300))
+    # Generate print sheet PDF
+    num_pages = generate_print_pdf(all_labels, PRINT_SHEET_PDF)
 
     # Generate dashboard HTML
     html = generate_dashboard_html(entries, mappings)
@@ -358,7 +382,7 @@ def main():
 
     print(f"\n✓ {len(entries)} barcode labels saved to  {OUTPUT_DIR}/")
     print(f"✓ mappings.json updated")
-    print(f"✓ print sheet →  {PRINT_SHEET_PNG}")
+    print(f"✓ print sheet →  {PRINT_SHEET_PDF}  ({num_pages} page(s))")
     print(f"✓ dashboard →  {DASHBOARD_HTML}")
 
 
