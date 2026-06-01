@@ -9,7 +9,7 @@ from .mappings import (
     remove_mapping,
 )
 from .player import Player
-from .scanner import stdin_reader
+from .scanner import barcode_reader
 
 
 def cmd_play() -> None:
@@ -20,17 +20,17 @@ def cmd_play() -> None:
         sys.exit(1)
 
     player = Player()
-    print(f"Ready! {len(mappings)} songs mapped. Scan a barcode...")
-    print("(Ctrl+C to quit)\n")
+    print(f"Ready! {len(mappings)} songs mapped. Scan a barcode...", flush=True)
+    print("(Ctrl+C to quit)\n", flush=True)
 
     try:
-        for barcode in stdin_reader():
+        for barcode in barcode_reader():
             if barcode in mappings:
                 entry = mappings[barcode]
-                print(f"  {entry['name']} -> {entry['song']}")
+                print(f"  {entry['name']} -> {entry['song']}", flush=True)
                 player.play(entry["song"])
             else:
-                print(f"  Unknown barcode: {barcode}")
+                print(f"  Unknown barcode: {barcode}", flush=True)
     except KeyboardInterrupt:
         print("\nStopping...")
         player.stop()

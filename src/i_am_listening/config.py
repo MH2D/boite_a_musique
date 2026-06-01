@@ -13,7 +13,7 @@ def get_play_command() -> list[str]:
     if platform.system() == "Darwin":
         return ["afplay"]
     if shutil.which("mpv"):
-        return ["mpv", "--no-video"]
+        return ["mpv", "--no-video", "--audio-device=alsa/plughw:Headphones,0"]
     raise RuntimeError(
         "No audio player found. Install mpv (apt install mpv) or run on macOS."
     )
