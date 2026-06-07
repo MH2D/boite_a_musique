@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boîte à Musique — Electronics Basics</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b22; --ink: #e7e9ee; --muted: #9aa3b2;
+    --accent: #6ea8fe; --warn: #ffb454; --good: #5ad19a; --line: #2a2f3a;
+    --red: #e0556b; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 2rem; margin: 0 0 .2em; letter-spacing: -.02em; }
+  h2 { font-size: 1.35rem; margin: 2.4em 0 .6em; padding-top: .4em; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 1.6em 0 .4em; color: var(--accent); }
+  p, li { color: var(--ink); }
+  .lead { color: var(--muted); font-size: 1.08rem; }
+  code { font-family: var(--mono); background: #232733; padding: .12em .4em; border-radius: 5px; font-size: .9em; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin: 18px 0; }
+  .tag { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+         background: #232733; color: var(--muted); padding: 3px 9px; border-radius: 999px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .94rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .pin-num { font-family: var(--mono); color: var(--accent); }
+  .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 16px 0; color: var(--muted); }
+  .warn { border-left-color: var(--warn); }
+  .good { border-left-color: var(--good); }
+  figure { margin: 22px 0; text-align: center; }
+  figcaption { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+  svg { max-width: 100%; height: auto; }
+  a { color: var(--accent); }
+  .sources li { margin: 8px 0; font-size: .92rem; }
+  .kbd { font-family: var(--mono); font-size: .85em; color: var(--good); }
+  ul.gloss { list-style: none; padding: 0; }
+  ul.gloss > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  ul.gloss b { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">Boîte à Musique · hardware primer</span>
+  <h1>How the LCD talks to the Raspberry Pi</h1>
+  <p class="lead">A plain-language guide to the words and ideas behind wiring a 16×2 character
+  LCD to your Pi: <code>VCC</code>, <code>GND</code>, <code>SDA</code>, <code>SCL</code>, I²C,
+  logic levels, pull-ups, and contrast. Everything we did, and why.</p>
+
+  <!-- ============================================================ -->
+  <h2>1. The four wires, in one sentence each</h2>
+  <p>Almost every simple electronic module talks to a computer using some combination of
+  four kinds of wire. Two carry <em>power</em>, two carry <em>data</em>.</p>
+
+  <table>
+    <tr><th>Name</th><th>Stands for</th><th>What it does</th></tr>
+    <tr><td><code>VCC</code></td><td>Voltage at the Common Collector</td>
+        <td>The <b>power-in</b> wire. Delivers the supply voltage (3.3 V or 5 V) that makes the device run. Think of it as the "+" terminal of a battery.</td></tr>
+    <tr><td><code>GND</code></td><td>Ground</td>
+        <td>The <b>return path</b> for electricity, and the shared <b>0 V reference</b>. Every voltage is measured relative to GND. The "−" terminal.</td></tr>
+    <tr><td><code>SDA</code></td><td>Serial Data</td>
+        <td>The wire the actual <b>data</b> (characters, commands) travels on, one bit at a time.</td></tr>
+    <tr><td><code>SCL</code></td><td>Serial Clock</td>
+        <td>A metronome tick that says "read the data wire <em>now</em>." Keeps both sides in step.</td></tr>
+  </table>
+
+  <div class="note">Why do you always need at least VCC <em>and</em> GND? Electricity flows in a
+  loop. Current leaves the Pi through VCC, does its work in the display, and must return through
+  GND. One wire alone is a dead end — no loop, no current, no light.</div>
+
+  <!-- ============================================================ -->
+  <h2>2. Voltage, current — the water analogy</h2>
+  <p>The classic mental model:</p>
+  <ul>
+    <li><b>Voltage (volts, V)</b> = water <em>pressure</em>. How hard the electricity is being pushed. Our display runs on 3.3 V or 5 V pressure.</li>
+    <li><b>Current (amps, A)</b> = water <em>flow rate</em>. How much is actually moving.</li>
+    <li><b>Resistance (ohms, Ω)</b> = a <em>narrow pipe</em>. Restricts the flow.</li>
+  </ul>
+  <p>They're linked by <b>Ohm's law</b>: <code>V = I × R</code> (pressure = flow × narrowness).
+  We used this earlier to calculate that a 4.7 kΩ resistor limits a stray current to a harmless
+  ~0.36 mA — narrow pipe, tiny trickle.</p>
+
+  <!-- ============================================================ -->
+  <h2>3. The GPIO header — and which pins we used</h2>
+  <p>The Pi exposes its electrical connections on a double row of 40 pins called the
+  <b>GPIO header</b> (General-Purpose Input/Output). Each pin has a <em>fixed</em> job —
+  you can't move a data wire to just any pin. Pin 1 is the corner pin nearest the SD-card/power
+  edge; numbering zig-zags (odd row / even row).</p>
+
+  <figure>
+    <svg viewBox="0 0 520 300" role="img" aria-label="Raspberry Pi GPIO corner pinout">
+      <style>
+        .board { fill:#1d3b2a; stroke:#2a5c41; stroke-width:2; }
+        .pin { fill:#caa84a; stroke:#8a7223; stroke-width:1; }
+        .pinsq { fill:#e0556b; stroke:#8a2333; stroke-width:1.5; }
+        .plabel { font: 12px ui-monospace, monospace; fill:#e7e9ee; }
+        .fn { font: 12px -apple-system, sans-serif; }
+        .used { fill:#6ea8fe; }
+        .pwr { fill:#e0556b; }
+        .gnd { fill:#9aa3b2; }
+        .arrow { stroke:#6ea8fe; stroke-width:1.5; fill:none; }
+      </style>
+      <rect x="20" y="20" width="180" height="260" rx="8" class="board"/>
+      <text x="30" y="42" class="plabel" fill="#7fd6a3">GPIO header (top corner)</text>
+
+      <!-- row pairs: x odd=70, even=120 -->
+      <!-- pin1/2 -->
+      <rect x="62" y="60" width="16" height="16" rx="3" class="pinsq"/>
+      <rect x="112" y="60" width="16" height="16" rx="3" class="pin"/>
+      <text x="40" y="73" class="plabel">1</text><text x="134" y="73" class="plabel">2</text>
+      <!-- pin3/4 -->
+      <rect x="62" y="92" width="16" height="16" rx="3" class="pin"/>
+      <rect x="112" y="92" width="16" height="16" rx="3" class="pin"/>
+      <text x="40" y="105" class="plabel">3</text><text x="134" y="105" class="plabel">4</text>
+      <!-- pin5/6 -->
+      <rect x="62" y="124" width="16" height="16" rx="3" class="pin"/>
+      <rect x="112" y="124" width="16" height="16" rx="3" class="pin"/>
+      <text x="40" y="137" class="plabel">5</text><text x="134" y="137" class="plabel">6</text>
+      <!-- pin7/8 -->
+      <rect x="62" y="156" width="16" height="16" rx="3" class="pin"/>
+      <rect x="112" y="156" width="16" height="16" rx="3" class="pin"/>
+      <text x="40" y="169" class="plabel">7</text><text x="134" y="169" class="plabel">8</text>
+      <text x="80" y="200" class="plabel" fill="#9aa3b2">… 40 pins total …</text>
+
+      <!-- function callouts -->
+      <text x="220" y="73"  class="fn pwr">3.3 V  ·  5 V  ← VCC moved here</text>
+      <text x="220" y="105" class="fn used">SDA (data)  ·  5 V</text>
+      <text x="220" y="137" class="fn used">SCL (clock) ·  GND ← our ground</text>
+      <line x1="200" y1="68" x2="218" y2="68" class="arrow"/>
+      <line x1="200" y1="100" x2="218" y2="100" class="arrow"/>
+      <line x1="200" y1="132" x2="218" y2="132" class="arrow"/>
+
+      <text x="30" y="262" class="plabel" fill="#e0556b">■</text>
+      <text x="48" y="262" class="fn" fill="#9aa3b2">red square = pin 1 (square pad on the board's underside)</text>
+    </svg>
+    <figcaption>The corner of the 40-pin header. We use pins 1/2 (power), 3 (SDA), 5 (SCL), 6 (GND).</figcaption>
+  </figure>
+
+  <table>
+    <tr><th>Our wire</th><th>Pi pin</th><th>Why this pin</th></tr>
+    <tr><td>VCC</td><td><span class="pin-num">2 (5 V)</span></td><td>Moved here from pin 1 (3.3 V) for a brighter display</td></tr>
+    <tr><td>GND</td><td><span class="pin-num">6</span></td><td>Any ground pin works; pin 6 is closest</td></tr>
+    <tr><td>SDA</td><td><span class="pin-num">3</span></td><td>The <em>only</em> pin wired to the Pi's I²C data line</td></tr>
+    <tr><td>SCL</td><td><span class="pin-num">5</span></td><td>The <em>only</em> pin wired to the I²C clock line</td></tr>
+  </table>
+
+  <!-- ============================================================ -->
+  <h2>4. I²C — how two chips share just two wires</h2>
+  <p><b>I²C</b> ("eye-squared-see", Inter-Integrated Circuit) is the <em>language</em> spoken
+  over SDA + SCL. Its trick: many devices can share the same two wires. Each device has a unique
+  <b>address</b>. The Pi (the "controller") shouts the address onto the bus; only the matching
+  device answers. Your display answered at address <code>0x27</code> — that's what the
+  <code>i2cdetect</code> scan confirmed.</p>
+
+  <figure>
+    <svg viewBox="0 0 520 200" role="img" aria-label="I2C bus between Pi and LCD backpack">
+      <style>
+        .box { fill:#181b22; stroke:#6ea8fe; stroke-width:2; rx:8; }
+        .box2 { fill:#181b22; stroke:#5ad19a; stroke-width:2; }
+        .t { font: 13px -apple-system, sans-serif; fill:#e7e9ee; }
+        .tm { font: 11px ui-monospace, monospace; fill:#9aa3b2; }
+        .wire { stroke:#caa84a; stroke-width:2.5; fill:none; }
+        .wlbl { font: 11px ui-monospace, monospace; }
+      </style>
+      <rect x="30" y="60" width="150" height="90" rx="10" class="box"/>
+      <text x="60" y="95" class="t">Raspberry Pi</text>
+      <text x="60" y="115" class="tm">controller</text>
+
+      <rect x="340" y="60" width="150" height="90" rx="10" class="box2"/>
+      <text x="360" y="95" class="t">LCD backpack</text>
+      <text x="360" y="115" class="tm">PCF8574 · 0x27</text>
+
+      <line x1="180" y1="85" x2="340" y2="85" class="wire"/>
+      <text x="225" y="78" class="wlbl" fill="#6ea8fe">SDA — data</text>
+      <line x1="180" y1="125" x2="340" y2="125" class="wire"/>
+      <text x="225" y="143" class="wlbl" fill="#6ea8fe">SCL — clock</text>
+    </svg>
+    <figcaption>Two wires carry everything. The clock (SCL) paces the bits sent on data (SDA).</figcaption>
+  </figure>
+
+  <h3>What the "backpack" does</h3>
+  <p>A bare 16×2 LCD needs <b>16 wires</b>. That's a lot of GPIO pins. The little
+  <b>Keyestudio I²C backpack</b> soldered to yours contains a chip (a <b>PCF8574</b>, an
+  "I/O expander") that converts those 16 parallel wires into just the 2 I²C wires. It's a
+  translator that saves you 12 pins.</p>
+
+  <!-- ============================================================ -->
+  <h2>5. Logic levels &amp; the 3.3 V vs 5 V question</h2>
+  <p>Digital chips represent <b>1</b> and <b>0</b> as <em>high</em> and <em>low</em> voltages.
+  "High" means roughly the supply voltage. This is a <b>logic level</b>. The catch: the Pi's
+  data pins are built for <b>3.3 V logic</b> and are <b>not 5 V tolerant</b> — feeding them 5 V
+  stresses them.</p>
+  <div class="note warn">This is the whole tension behind our power choice. The display looks
+  best on 5 V, but its data lines then idle at 5 V — above the Pi's 3.3 V rating. We accepted it
+  because a resistor (next section) limits the actual stress to a harmless trickle, and because
+  your display is powered <em>by</em> the Pi, so they switch on and off together.</div>
+
+  <!-- ============================================================ -->
+  <h2>6. Pull-up resistors — why the data lines sit "high"</h2>
+  <p>I²C wires don't actively drive themselves high. Instead, a <b>pull-up resistor</b> gently
+  ties each line up to VCC, so it rests at "high (1)" by default; a chip sends a "0" by briefly
+  yanking the line down to ground. (This "release-high, pull-low" design lets many chips share
+  the wire without ever fighting each other.)</p>
+  <p>The side effect: when idle, SDA/SCL sit at whatever VCC is. At 5 V VCC, they idle at 5 V —
+  and that's the voltage the Pi's 3.3 V pins see. The pull-up's resistance is what saves us:</p>
+
+  <figure>
+    <svg viewBox="0 0 520 180" role="img" aria-label="Pull-up resistor limiting current into the Pi pin">
+      <style>
+        .rail { stroke:#e0556b; stroke-width:2; }
+        .gline { stroke:#9aa3b2; stroke-width:2; }
+        .res { fill:none; stroke:#caa84a; stroke-width:2; }
+        .lt { font: 12px -apple-system, sans-serif; fill:#e7e9ee; }
+        .lm { font: 11px ui-monospace, monospace; fill:#9aa3b2; }
+      </style>
+      <line x1="40" y1="30" x2="480" y2="30" class="rail"/>
+      <text x="44" y="22" class="lt" fill="#e0556b">+5 V (VCC)</text>
+      <!-- resistor zigzag -->
+      <path d="M250,30 L250,55 L240,60 L260,70 L240,80 L260,90 L250,95 L250,120" class="res"/>
+      <text x="270" y="78" class="lm">4.7 kΩ pull-up</text>
+      <!-- to pin -->
+      <line x1="250" y1="120" x2="420" y2="120" class="gline" stroke="#6ea8fe"/>
+      <text x="360" y="112" class="lt" fill="#6ea8fe">SDA → Pi pin</text>
+      <circle cx="420" cy="120" r="5" fill="#6ea8fe"/>
+      <text x="40" y="150" class="lm">(5 − 3.3) V ÷ 4700 Ω ≈ 0.36 mA  →  a harmless trickle into the Pi's clamp diode</text>
+    </svg>
+    <figcaption>The resistor throttles the over-voltage current to a fraction of a milliamp.</figcaption>
+  </figure>
+
+  <!-- ============================================================ -->
+  <h2>7. Contrast (V0) — why the screen was blank then dim</h2>
+  <p>A character LCD has two independent halves: the <b>data</b> side (which character sits in
+  which cell) and the <b>optics</b> (a liquid-crystal layer that's only <em>visible</em> when the
+  right voltage hits a pin called <b>V0</b>). You can have perfect data and a lit backlight yet see
+  nothing, because V0 is wrong.</p>
+  <p>The ideal V0 isn't a fixed number — it drifts with temperature and viewing angle — so the
+  backpack puts a <b>potentiometer</b> (the blue screw = an adjustable resistor) on V0. You turn it
+  to dial in contrast by eye. And because the pot can only reach voltages within the supply range,
+  3.3 V couldn't get dark enough — which is exactly why moving to 5 V sharpened the text.</p>
+
+  <!-- ============================================================ -->
+  <h2>8. Putting it together — our boîte à musique</h2>
+  <div class="card">
+    <span class="tag">the full chain</span>
+    <p style="margin:.3em 0">Scan barcode → Pi looks it up → plays the song <em>and</em>
+    sends the person's name over I²C → backpack (PCF8574) translates it to the LCD's 16 pins →
+    HD44780 controller stores the characters → liquid crystal (contrast set by the pot) makes
+    them visible.</p>
+  </div>
+  <div class="note good">The display is a <b>visual extra</b>. The code is written so that if the
+  screen is ever unplugged, missing, or faulty, the music box keeps working exactly as before —
+  the LCD never gets a vote on whether a song plays.</div>
+
+  <!-- ============================================================ -->
+  <h2>Sources &amp; further reading</h2>
+  <ul class="sources">
+    <li>Raspberry Pi GPIO pinout (interactive): <a href="https://pinout.xyz/" target="_blank" rel="noopener">pinout.xyz</a></li>
+    <li>Official Raspberry Pi GPIO documentation: <a href="https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio" target="_blank" rel="noopener">raspberrypi.com/documentation</a> (notes the pins are 3.3 V, not 5 V tolerant)</li>
+    <li>SparkFun — I²C tutorial: <a href="https://learn.sparkfun.com/tutorials/i2c" target="_blank" rel="noopener">learn.sparkfun.com/tutorials/i2c</a></li>
+    <li>SparkFun — Pull-up resistors: <a href="https://learn.sparkfun.com/tutorials/pull-up-resistors" target="_blank" rel="noopener">learn.sparkfun.com/tutorials/pull-up-resistors</a></li>
+    <li>SparkFun — Voltage, current, resistance &amp; Ohm's law: <a href="https://learn.sparkfun.com/tutorials/voltage-current-resistance-and-ohms-law" target="_blank" rel="noopener">learn.sparkfun.com/.../ohms-law</a></li>
+    <li>Wikipedia — I²C bus: <a href="https://en.wikipedia.org/wiki/I%C2%B2C" target="_blank" rel="noopener">en.wikipedia.org/wiki/I²C</a></li>
+    <li>Wikipedia — Hitachi HD44780 LCD controller: <a href="https://en.wikipedia.org/wiki/Hitachi_HD44780_LCD_controller" target="_blank" rel="noopener">en.wikipedia.org/wiki/Hitachi_HD44780_LCD_controller</a></li>
+    <li>NXP/TI PCF8574 I/O expander datasheet: <a href="https://www.ti.com/lit/ds/symlink/pcf8574.pdf" target="_blank" rel="noopener">ti.com/lit/ds/symlink/pcf8574.pdf</a></li>
+    <li>NXP I²C-bus specification (UM10204): <a href="https://www.nxp.com/docs/en/user-guide/UM10204.pdf" target="_blank" rel="noopener">nxp.com/.../UM10204.pdf</a></li>
+    <li>RPLCD library (what our code uses): <a href="https://rplcd.readthedocs.io/" target="_blank" rel="noopener">rplcd.readthedocs.io</a></li>
+  </ul>
+
+  <p style="color:var(--muted);font-size:.85rem;margin-top:40px">
+    Written for the Boîte à Musique project · open this file in any browser.</p>
+
+</div>
+</body>
+</html>

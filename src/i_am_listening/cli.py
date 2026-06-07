@@ -8,6 +8,7 @@ from .mappings import (
     name_from_photo,
     remove_mapping,
 )
+from .display import Display
 from .player import Player
 from .scanner import barcode_reader
 
@@ -20,6 +21,8 @@ def cmd_play() -> None:
         sys.exit(1)
 
     player = Player()
+    display = Display()
+    display.ready()
     print(f"Ready! {len(mappings)} songs mapped. Scan a barcode...", flush=True)
     print("(Ctrl+C to quit)\n", flush=True)
 
@@ -29,11 +32,14 @@ def cmd_play() -> None:
                 entry = mappings[barcode]
                 print(f"  {entry['name']} -> {entry['song']}", flush=True)
                 player.play(entry["song"])
+                display.now_playing(entry["name"])
             else:
                 print(f"  Unknown barcode: {barcode}", flush=True)
+                display.unknown()
     except KeyboardInterrupt:
         print("\nStopping...")
         player.stop()
+        display.stop()
 
 
 def cmd_add() -> None:

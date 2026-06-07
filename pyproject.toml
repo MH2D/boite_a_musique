@@ -6,6 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "pillow>=12.2.0",
     "python-barcode>=0.16.1",
+    # Optional 16x2 I2C LCD support (Raspberry Pi). Pure-Python, harmless to
+    # install on macOS where display.py stays a no-op.
+    "RPLCD>=1.4.0",
+    "smbus2>=0.4.0",
 ]
 
 [build-system]
